@@ -1,3 +1,4 @@
+use image::imageops::FilterType;
 use plotters::prelude::*;
 use plotters_bitmap::bitmap_pixel::RGBPixel;
 use std::error::Error;
@@ -5,97 +6,78 @@ use std::error::Error;
 const OUT_FILE_NAME: &str = "sample.png";
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let (width, height) = (1024, 768);
+    let (width, height) = (400, 300);
     let mut canvas = image::RgbImage::new(width, height);
+
+    let x: Vec<i32> = (0..10).collect();
+    let y: Vec<f32> = x.iter().map(|x| (x * x) as f32).collect();
+    let points: Vec<_> = x
+        .iter()
+        .zip(y.iter())
+        .map(|(&v0, &v1)| (v0 as f32, v1 as f32))
+        .collect();
 
     // limit `buf` life time
     {
+        // use plotters::coord::ranged1d::types::RangedCoordf32;
         let mut buf = canvas.as_flat_samples_mut();
 
         let root =
-            BitMapBackend::<RGBPixel>::with_buffer_and_format(buf.as_mut_slice(), (width, height))?;
-        let root_area = root.into_drawing_area();
+            BitMapBackend::<RGBPixel>::with_buffer_and_format(buf.as_mut_slice(), (width, height))?
+                .into_drawing_area();
+        root.fill(&WHITE)?;
 
-        root_area.fill(&WHITE)?;
+        // ラベル文字が切れないように適当なmarginを設定しておく
+        // marginの大きさは対象の描画領域に依存することに注意
+        let root = root.margin(20, 20, 20, 20);
 
-        let root_area = root_area.titled("Image Title", ("sans-serif", 60))?;
+        let mut chart = ChartBuilder::on(&root)
+            .caption("y=x^2", ("Arial", 20).into_font())
+            .x_label_area_size(40) // x軸ラベルの表示領域を用意しておく。
+            .y_label_area_size(40) // y軸ラベルの表示領域を用意しておく。
+            .build_cartesian_2d(-0.5f32..9.5f32, -5f32..85f32)?;
 
-        let (upper, lower) = root_area.split_vertically(512);
+        // plot_areaの一部に表示させる場合には、表示エリアと目的の表示範囲の情報を使って、
+        // 明示的にリサイズする必要がある。
+        let dst_w = 8.0f32;
+        let dst_h = 80.0f32;
+        let x_range = chart.x_range();
+        let x_scale = dst_w / (x_range.end - x_range.start);
+        let y_range = chart.y_range();
+        let y_scale = dst_h / (y_range.end - y_range.start);
 
-        let x_axis = (-3.4f32..3.4).step(0.1);
+        // plot areaのピクセル数を取得する
+        let (w, h) = chart.plotting_area().dim_in_pixel();
 
-        let mut cc = ChartBuilder::on(&upper)
-            .margin(5)
-            .set_all_label_area_size(50)
-            .caption("Sine and Cosine", ("sans-serif", 40))
-            .build_cartesian_2d(-3.4f32..3.4, -1.2f32..1.2f32)?;
+        // plot areaの一部に表示させるためのサイズを計算する。
+        let w = (w as f32 * x_scale) as u32;
+        let h = (h as f32 * y_scale) as u32;
+        // 明示的にリサイズする
+        let img = image::open("../macaque.jpg")?.resize_exact(w, h, FilterType::Gaussian);
 
-        cc.configure_mesh()
-            .x_labels(20)
-            .y_labels(10)
-            .disable_mesh()
-            .x_label_formatter(&|v| format!("{:.1}", v))
-            .y_label_formatter(&|v| format!("{:.1}", v))
-            .draw()?;
+        // 描画
+        let elem: BitMapElement<_> = ((0.0, 80.0), img).into(); // or
+                                                                // let elem = BitMapElement::<_>::from(((0.0f32, 80.0f32), img));
 
-        cc.draw_series(LineSeries::new(x_axis.values().map(|x| (x, x.sin())), &RED))?
-            .label("Sine")
-            .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
+        chart.draw_series(std::iter::once(elem))?;
 
-        cc.draw_series(LineSeries::new(
-            x_axis.values().map(|x| (x, x.cos())),
-            &BLUE,
-        ))?
-        .label("Cosine")
-        .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &BLUE));
+        chart.draw_series(LineSeries::new(points.iter().copied(), &BLUE))?;
 
-        cc.configure_series_labels().border_style(&BLACK).draw()?;
+        chart.draw_series(
+            points
+                .iter()
+                .map(|v| Circle::new((v.0, v.1), 3, BLUE.filled())),
+        )?;
 
-        /*
-        // It's possible to use a existing pointing element
-         cc.draw_series(PointSeries::<_, _, Circle<_>>::new(
-            (-3.0f32..2.1f32).step(1.0).values().map(|x| (x, x.sin())),
-            5,
-            Into::<ShapeStyle>::into(&RGBColor(255,0,0)).filled(),
-        ))?;*/
-
-        // Otherwise you can use a function to construct your pointing element yourself
-        cc.draw_series(PointSeries::of_element(
-            (-3.0f32..2.1f32).step(1.0).values().map(|x| (x, x.sin())),
-            5,
-            ShapeStyle::from(&RED).filled(),
-            &|coord, size, style| {
-                EmptyElement::at(coord)
-                    + Circle::new((0, 0), size, style)
-                    + Text::new(format!("{:?}", coord), (0, 15), ("sans-serif", 15))
-            },
-        ))?;
-
-        let drawing_areas = lower.split_evenly((1, 2));
-
-        for (drawing_area, idx) in drawing_areas.iter().zip(1..) {
-            let mut cc = ChartBuilder::on(drawing_area)
-                .x_label_area_size(30)
-                .y_label_area_size(30)
-                .margin_right(20)
-                .caption(format!("y = x^{}", 1 + 2 * idx), ("sans-serif", 40))
-                .build_cartesian_2d(-1f32..1f32, -1f32..1f32)?;
-            cc.configure_mesh().x_labels(5).y_labels(3).draw()?;
-
-            cc.draw_series(LineSeries::new(
-                (-1f32..1f32)
-                    .step(0.01)
-                    .values()
-                    .map(|x| (x, x.powf(idx as f32 * 2.0 + 1.0))),
-                &BLUE,
-            ))?;
-        }
-
-        // To avoid the IO failure being ignored silently, we manually call the present function
-        root_area.present().expect("Unable to write result to file, please make sure 'plotters-doc-data' dir exists under current dir");
+        chart
+            .configure_mesh()
+            .light_line_style(BLACK.stroke_width(0)) // stroke width 0にminor tickを消す
+            .draw()?; // draw ticks
+                      // To avoid the IO failure being ignored silently, we manually call the present function
+        root.present().expect("Unable to write result to file, please make sure 'plotters-doc-data' dir exists under current dir");
     }
 
-    canvas.save(format!("{}", OUT_FILE_NAME))?;
+    canvas.save(OUT_FILE_NAME)?;
     println!("Result has been saved to {}", OUT_FILE_NAME);
     Ok(())
 }
