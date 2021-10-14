@@ -4,8 +4,18 @@ matplotlibとRustのplottersの書き方を比較したノートブック置き�
 
 ![ss](fig/ss.png)
 
-## Usage
+## Contents
 
+* `python.ipynb`
+  * matplotlibで作った場合
+* `rust.ipynb`
+  * plottersのevcxr機能をそのまま使った場合
+  * SVGバックエンド
+* `rust-bitmap.ipynb`
+  * plottersのBitMapBackendバージョン
+  * imshowなどはこちらのほうがやりやすい？
+
+## Usage
 
 ```sh
 docker build -t example .
