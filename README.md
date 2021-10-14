@@ -11,7 +11,7 @@ matplotlibとRustのplottersの書き方を比較したノートブック置き�
 * `rust.ipynb`
   * plottersのevcxr機能をそのまま使った場合
   * SVGバックエンド
-* `rust-bitmap.ipynb`
+* `rust-bitmapbackend.ipynb`
   * plottersのBitMapBackendバージョン
   * imshowなどはこちらのほうがやりやすい？
 
